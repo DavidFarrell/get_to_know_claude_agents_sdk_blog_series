@@ -3,7 +3,7 @@ title: "Claude Agent SDK: Part 2"
 date: 2026-01-19T09:00:00Z
 slug: /01-19-claude-agent-sdk-part-2/
 description: "Continuing to explore Anthropic's Agent SDK - making tool calls more descriptive and learning about Python introspection."
-image: images/2026/01-19-claude-agent-sdk-part-2.png
+image: images/01-19-claude-agent-sdk-part-2.png
 caption: "Claude the painter bringing color to the terminal, with Bowie (the Ragdoll) knocking over paint"
 categories:
   - coding
@@ -34,7 +34,7 @@ You can see tool usage happening (`[Using Glob...]`, `[Using Read...]`), but the
 
 First, I need to figure out what information is available on a `ToolUseBlock`. When I started typing in my IDE, IntelliSense suggested a `signature` property:
 
-![IntelliSense suggesting signature property](/images/2026/intellisense-wrong-suggestion.png)
+![IntelliSense suggesting signature property](images/intellisense-wrong-suggestion.png)
 
 But when I tried to use it, I got an error:
 
@@ -148,7 +148,7 @@ PATH = f"{ESC}38;2;120;140;180m"      # soft blue
 
 And this is what it looks like when I run it:
 
-![Colored terminal output showing the writing agent in action](/images/2026/colored-terminal-output.png)
+![Colored terminal output showing the writing agent in action](images/colored-terminal-output.png)
 
 
 ### Multi-line Input with prompt_toolkit
@@ -201,7 +201,7 @@ A few things to note:
 
 Look at the screenshot below. Notice how after I type "hi", the next line is indented to align directly below where my text started. The same with "how are you" and the line after it. This means I'm sending a bunch of useless whitespace characters to the API, and the formatting I'm actually sending isn't what I think I'm sending. It looks fine to me on screen, but behind the scenes there's extra whitespace being added to every line.
 
-![Indentation adding spaces to each line](/images/2026/indentation-wasting-tokens.png)
+![Indentation adding spaces to each line](images/indentation-wasting-tokens.png)
 
 By default, prompt_toolkit indents continuation lines to align with where the first line started. Setting `prompt_continuation=""` keeps subsequent lines flush to the left, so I'm sending exactly what I type without hidden whitespace.
 

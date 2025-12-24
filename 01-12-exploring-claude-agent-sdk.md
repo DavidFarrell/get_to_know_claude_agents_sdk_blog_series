@@ -1,19 +1,20 @@
 ---
 title: "Exploring the Claude Agent SDK"
-date: 2025-12-23T12:00:00Z
-slug: /12-23-exploring-claude-agent-sdk/
+date: 2026-01-12T09:00:00Z
+slug: /01-12-exploring-claude-agent-sdk/
 description: "Learning in public: experimenting with Anthropic's Agent SDK after hearing that anything Claude Code can do, you can do with the SDK."
-image: /images/2025/12-23-claude-agent-sdk.png
-caption: "Getting started with the Claude Agent SDK"
+image: images/12-23-claude-agent-sdk.png
+caption: "Claude teaching David about the Agent SDK, with Bowie (the cat) supervising"
 categories:
   - coding
   - artificial-intelligence
+  - feature
 tags:
   - claude
   - agent-sdk
   - python
   - learning
-draft: true
+  - feature
 ---
 
 At a recent Claude Code meetup, one of the Anthropic staff mentioned that anything Claude Code can do, you can do using the Agent SDK. That caught my attention. I've been using Claude Code heavily, but I hadn't really understood what was happening under the hood. So I've decided to dig in and document what I learn as I go.
@@ -119,7 +120,7 @@ I also found references to additional tools by poking around the SDK, other Anth
 
 1. **MultiEdit** - Apply multiple sequential edits to a file atomically ([claude-agent-sdk-demos repo](https://github.com/anthropics/claude-agent-sdk-demos/blob/main/hello-world/hello-world.ts))
 2. **LS** - List directory contents ([claude-code plugins](https://github.com/anthropics/claude-code/blob/main/plugins/feature-dev/agents/code-explorer.md))
-3. **NotebookRead** - Read Jupyter notebook files ([claude-code plugins](https://github.com/anthropics/claude-code/blob/main/plugins/feature-dev/agents/code-explorer.md))
+3. **NotebookRead** - Read Jupyter notebook files ([claude-code plugin](https://github.com/anthropics/claude-code/blob/main/plugins/feature-dev/agents/code-explorer.md))
 4. **EnterPlanMode** - Enter plan mode for exploration and design ([Piebald-AI extracted system prompts](https://github.com/Piebald-AI/claude-code-system-prompts/blob/main/system-prompts/tool-description-enterplanmode.md))
 5. **Computer** - Chrome browser automation tool ([Piebald-AI extracted system prompts](https://github.com/Piebald-AI/claude-code-system-prompts/blob/main/system-prompts/tool-description-computer.md))
 6. **LSP** - Interact with Language Server Protocol servers ([claude-code CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md))
@@ -127,7 +128,7 @@ I also found references to additional tools by poking around the SDK, other Anth
 
 ## Super Basic Writing Agent
 
-This is a more or less minimal implementation of an agent based on the Claude Agent SDK:
+This is a more or less minimal implementation of an agent based on the Claude Agent SDK. Here's the full code, but I'll break down a couple of interesting bits below.
 
 ```python
 #!/usr/bin/env python3
@@ -303,9 +304,12 @@ You share your own experience and some skepticism, particularly about log-probab
 
 You:
 ```
+
+You can see the different message types in action here: the `[Using Glob...]` and `[Using Read...]` lines come from ToolUseBlock messages, the text responses are TextBlock messages, and the `(Cost: $0.1905)` at the end is from the ResultMessage.
+
 As you can see, nothing that Claude Code wouldn't do out of the box - but this one is my agent at least, and is a good starting point :)
 
 
 ## thingsithinkithink
 
-* One of the best things about finishing work for Christmas is that I can work on things just for fun!
+* One of the best things about having a couple of weeks off during the break was getting to poke around and try some things just for fun again. It's been a minute.
