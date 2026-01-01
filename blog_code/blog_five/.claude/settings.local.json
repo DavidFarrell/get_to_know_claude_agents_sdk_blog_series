@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(file:*)",
+      "Bash(for f in pro_*.png)",
+      "Bash(do mv \"$f\" \"$f%.png.jpg\")",
+      "Bash(done)",
+      "Bash(ls:*)",
+      "Bash(while read f)",
+      "Bash(npm run build:*)",
+      "mcp__nano-banana__edit_image_from_file"
+    ]
+  }
+}

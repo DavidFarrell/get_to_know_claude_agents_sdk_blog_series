@@ -1,0 +1,45 @@
+# Writing Agent Configuration
+# This file configures the writing agent for your specific blog/writing project.
+
+blog:
+  # Path to the blog root folder
+  path: /Users/david/git/ai-sandbox/projects/websites/thingsithinkithink.blog
+
+  # Relative paths within the blog
+  posts_folder: content/posts
+  images_folder: assets/images
+
+  # Posts go into: {posts_folder}/{year}/{slug}.md for posts and {images_folder}/images/{year}/mm-dd-slug.{extension} for images
+  year_folders: true
+
+  front_matter_template: |
+    ---
+    title: "$TITLE"
+    date: $DATE
+    slug: /$SLUG/
+    description: "$DESCRIPTION"
+    # Final hero image: images/$YEAR/$SLUG.png
+    image: https://picsum.photos/1600/900
+    caption: "TBD"
+    categories:
+      - artificial-intelligence
+    tags: []
+    draft: true
+    ---
+
+  # How to format dates and slugs when creating posts
+  date_format: "%Y-%m-%dT09:00:00Z"  # Always 9AM UTC
+  slug_pattern: "mm-dd"              # Prefix: "01-15-my-post-title"
+
+# Agent settings
+agent:
+  # Enable file checkpointing for safe editing
+  checkpoints_enabled: true
+
+  # Model to use (optional - uses SDK default if not specified)
+  # model: claude-sonnet-4-5-20250929
+
+  # Default categories for new posts (can be overridden per-post)
+  default_categories:
+    - artificial-intelligence
+
