@@ -32,6 +32,7 @@ from claude_agent_sdk import (
     TextBlock,
     ToolUseBlock,
     UserMessage,
+    query,
 )
 
 context_store = ContextStore()
@@ -90,9 +91,36 @@ class Checkpoint:
     uuid: str
     turn: int
     timestamp: datetime
+    summary: str = ""  # Brief description from Haiku
 
 
 config = load_config()
+
+
+async def summarize_turn(user_prompt: str, tool_calls: list[str]) -> str:
+    """Use Haiku to generate a brief summary of what happened this turn."""
+    summary_prompt = f"""Summarize this interaction in 10 words or less.
+User asked: {user_prompt[:200]}
+Tools used: {', '.join(tool_calls) if tool_calls else 'none'}
+Reply with ONLY the summary, no explanation."""
+
+    try:
+        summary = ""
+        async for msg in query(
+            prompt=summary_prompt,
+            options=ClaudeAgentOptions(
+                model="haiku",
+                allowed_tools=[],  # No tools needed for summary
+            )
+        ):
+            if isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock):
+                        summary += block.text
+        return summary.strip()[:50]  # Cap at 50 chars just in case
+    except Exception:
+        return "(summary unavailable)"
+
 
 async def run_agent(blog_path: Path | None = None):
     """Run the interactive writing agent."""
@@ -224,7 +252,8 @@ async def run_agent(blog_path: Path | None = None):
                         continue
                     print (f"{META}Available Checkpoints: {RESET}")
                     for i, cp in enumerate(checkpoints):
-                        print (f"    {i}: Turn {cp.turn} @ {cp.timestamp.strftime('%H:%M:%S')}")
+                        summary_display = f" - {cp.summary}" if cp.summary else ""
+                        print (f"    {i}: Turn {cp.turn} @ {cp.timestamp.strftime('%H:%M:%S')}{summary_display}")
                     idx = await session.prompt_async("Rewind to checkpoint: ")
                     try:
                         target = checkpoints[int(idx)]
@@ -259,17 +288,11 @@ async def run_agent(blog_path: Path | None = None):
 
                 # Track checkpoint - capture FIRST UserMessage (the prompt echo, before edits)
                 turn_checkpoint_captured = False
+                turn_tool_calls: list[str] = []  # Track tools used this turn
 
                 async for msg in client.receive_response():
-                    # DEBUG: Show all messages
-                    print(f"\n{META}[DEBUG] {type(msg).__name__}", end="")
-                    if isinstance(msg, UserMessage):
-                        print(f" uuid={msg.uuid}", end="")
-                    print(f"{RESET}", end="", flush=True)
-
                     # Capture first UserMessage as checkpoint (represents state BEFORE edits)
                     if isinstance(msg, UserMessage) and msg.uuid and not turn_checkpoint_captured:
-                        print(f"\n{META}[DEBUG] ✓ Captured checkpoint uuid={msg.uuid}{RESET}", end="", flush=True)
                         checkpoints.append(Checkpoint(
                             uuid=msg.uuid,
                             turn=len(checkpoints) + 1,
@@ -283,11 +306,19 @@ async def run_agent(blog_path: Path | None = None):
                                 print(block.text, end="", flush=True)
                             elif isinstance(block, ToolUseBlock):
                                 print(f"\n{CODE}[{block.name}: {block.input}]{RESET}", end="", flush=True)
+                                turn_tool_calls.append(block.name)
 
                     elif isinstance(msg, ResultMessage):
                         session_id = msg.session_id
                         turn = usage_tracker.record_turn(msg.usage, msg.total_cost_usd)
                         print(f"\n{META}{turn.format_verbose(usage_tracker.system_prompt_tokens)}{RESET}")
+
+                        # Get summary from Haiku for the checkpoint (if we captured one)
+                        if turn_checkpoint_captured and checkpoints:
+                            print(f"{META}(summarizing...){RESET}", end="", flush=True)
+                            summary = await summarize_turn(user_input, turn_tool_calls)
+                            checkpoints[-1].summary = summary
+                            print(f" {summary}")
 
 
 def main():
