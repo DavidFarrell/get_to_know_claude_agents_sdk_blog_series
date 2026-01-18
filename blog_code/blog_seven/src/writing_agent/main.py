@@ -3,6 +3,7 @@
 
 A CLI tool for working with blog/writing projects.
 """
+from __future__ import annotations
 
 import asyncio
 import sys
@@ -10,7 +11,7 @@ import yaml
 import os
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # for multi line support
 from prompt_toolkit import PromptSession
@@ -34,9 +35,22 @@ from claude_agent_sdk import (
       ToolUseBlock,
       UserMessage,
       query,
+      tool,
+      create_sdk_mcp_server,
   )
 
+from typing import Any
 from claude_agent_sdk.types import HookInput, HookContext, HookJSONOutput
+
+@dataclass
+class AgentState:
+    """Runtime state accessible to the agent via MCP tools"""
+    checkpoints: list[Checkpoint] = field(default_factory=list)
+    client: ClaudeSDKClient | None = None
+    session_id: str | None = None
+
+state = AgentState()
+
 
 context_store = ContextStore()
 usage_tracker = UsageTracker()
@@ -133,6 +147,49 @@ async def bash_permission_hook(
         "stopReason": "User denied Bash command"
     }
 
+@tool(
+    "rewind_files",
+    "Rewind edited files to a previous checkpoint. Use this to undo mistakes or when the user asks.",
+    {"checkpoint_index": int}
+)
+async def rewind_files_tool(args: dict[str, Any]) -> dict[str, Any]:
+    """rewind to a specific checkpoint"""
+    index = args["checkpoint_index"]
+
+    if index <0 or index >= len(state.checkpoints):
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"Invalid checkpoint index ({index}), Available: 0-{len(state.checkpoints)-1}"
+            }]
+        }
+
+    target = state.checkpoints[index]
+
+    try: 
+        await state.client.rewind_files(target.uuid)
+        # clear checkpoints after the rwind point
+        state.checkpoints[:] = state.checkpoints[:index]
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"Rewound to checkpoint {index}: {target.summary}"
+            }]
+        }
+    except Exception as e:
+        return {
+            "content" : [{
+                "type": "text",
+                "text": f"Rewind failed: {str(e)}"
+            }]
+        }
+
+# having defined the tool we can create the 'server'
+writing_agent_server = create_sdk_mcp_server(
+    name="writing-agent-tools",
+    version="0.0.1",
+    tools=[rewind_files_tool]
+)
 
 async def summarize_turn(user_prompt: str, tool_calls: list[str]) -> str:
     """Use Haiku to generate a brief summary of what happened this turn."""
@@ -188,7 +245,8 @@ async def run_agent(blog_path: Path | None = None):
     options = ClaudeAgentOptions(
         system_prompt=system_prompt,
         model=medium_model, # set to sonnet for time being
-        allowed_tools=["Read", "Write", "Edit","Glob", "Grep"], #removed Bash
+        mcp_servers={"writing-agent-tools": writing_agent_server}, 
+        allowed_tools=["Read", "Write", "Edit","Glob", "Grep", "mcp__writing-agent-tools__rewind_files"], 
         hooks = {
             "PreToolUse": [
                 HookMatcher(
@@ -205,9 +263,9 @@ async def run_agent(blog_path: Path | None = None):
         env={**os.environ, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING": "1"},  # Required env var
     )
 
-    # Checkpoint tracking for file rewinds
-    checkpoints: list[Checkpoint] = []
-    session_id: str | None = None
+    # Checkpoint tracking for file rewinds - uses the dataclass defined above
+    state.checkpoints = []
+    state.session_id = None
     pending_file_tool: bool = False  # True when we're waiting for tool result after Write/Edit
 
     # create a session for async prompting
@@ -217,6 +275,9 @@ async def run_agent(blog_path: Path | None = None):
     # Outer loop: each iteration creates a fresh client/session
     while True:
         async with ClaudeSDKClient(options=options) as client:
+            # link the client to the AgentState client so we can peek into it using mcp tools
+            state.client = client
+
             # Inject enabled context at the start of each new session
             context_block = context_store.get_enabled_content()
             if context_block:
@@ -294,16 +355,16 @@ async def run_agent(blog_path: Path | None = None):
                         print(f"Error: {e}")
                     continue
                 elif user_input == "/rewind":
-                    if not checkpoints:
+                    if not state.checkpoints:
                         print (f"{META}: No checkpoints available yet.{RESET}")
                         continue
                     print (f"{META}Available Checkpoints: {RESET}")
-                    for i, cp in enumerate(checkpoints):
+                    for i, cp in enumerate(state.checkpoints):
                         summary_display = f" - {cp.summary}" if cp.summary else ""
                         print (f"    {i}: Turn {cp.turn} @ {cp.timestamp.strftime('%H:%M:%S')}{summary_display}")
                     idx = await session.prompt_async("Rewind to checkpoint: ")
                     try:
-                        target = checkpoints[int(idx)]
+                        target = state.checkpoints[int(idx)]
                         # warn user
                         print(f"{ERROR}⚠ WARNING: This is destructive!{RESET}")
                         print(f"{ERROR}  Files will be restored to turn {target.turn}.{RESET}")
@@ -318,7 +379,7 @@ async def run_agent(blog_path: Path | None = None):
                             await client.rewind_files(target.uuid)
                             print(f"{META}✅ Rewound to turn {target.turn}{RESET}")
                             # Clear checkpoints later than rewind point
-                            checkpoints[:] = checkpoints[:int(idx)]
+                            state.checkpoints[:] = state.checkpoints[:int(idx)]
                         except Exception as rewind_error:
                             print(f"{ERROR}Rewind failed: {rewind_error}{RESET}")
                             print(f"{META}(Checkpoint may not have a file backup - this is a known SDK limitation){RESET}")
@@ -340,9 +401,9 @@ async def run_agent(blog_path: Path | None = None):
                 async for msg in client.receive_response():
                     # Capture first UserMessage as checkpoint (represents state BEFORE edits)
                     if isinstance(msg, UserMessage) and msg.uuid and not turn_checkpoint_captured:
-                        checkpoints.append(Checkpoint(
+                        state.checkpoints.append(Checkpoint(
                             uuid=msg.uuid,
-                            turn=len(checkpoints) + 1,
+                            turn=len(state.checkpoints) + 1,
                             timestamp=datetime.now()
                         ))
                         turn_checkpoint_captured = True
@@ -356,15 +417,15 @@ async def run_agent(blog_path: Path | None = None):
                                 turn_tool_calls.append(block.name)
 
                     elif isinstance(msg, ResultMessage):
-                        session_id = msg.session_id
+                        state.session_id = msg.session_id
                         turn = usage_tracker.record_turn(msg.usage, msg.total_cost_usd)
                         print(f"\n{META}{turn.format_verbose(usage_tracker.system_prompt_tokens)}{RESET}")
 
                         # Get summary from Haiku for the checkpoint (if we captured one)
-                        if turn_checkpoint_captured and checkpoints:
+                        if turn_checkpoint_captured and state.checkpoints:
                             print(f"{META}(summarizing...){RESET}", end="", flush=True)
                             summary = await summarize_turn(user_input, turn_tool_calls)
-                            checkpoints[-1].summary = summary
+                            state.checkpoints[-1].summary = summary
                             print(f" {summary}")
 
 
